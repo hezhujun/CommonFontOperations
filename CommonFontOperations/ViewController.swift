@@ -8,10 +8,18 @@
 import UIKit
 import SnapKit
 import CoreText
+import UniformTypeIdentifiers
 
 class ViewController: UIViewController {
     
     let textView = UITextView()
+    
+    let registerButton = UIButton()
+    let resignButton = UIButton()
+    let importButton = UIButton()
+    
+    var registedUrl: URL?
+    var fontFileUrlHandler: ((URL)->Void)?
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -176,12 +184,142 @@ extension ViewController {
 }
 
 private extension ViewController {
+    @objc func onButtonClick(_ sender: UIButton) {
+        if sender === registerButton {
+            registerFont()
+        } else if sender === resignButton {
+            resignFont()
+        } else if sender === importButton {
+            importFont()
+        }
+    }
+    
+    func registerFont() {
+        fontFileUrlHandler = { [weak self] url in
+            print(url)
+            // MARK: - Listing 3 - 10
+            // scope
+            CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+            
+            self?.registedUrl = url
+            
+            guard let fontDescriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor] else {
+                return
+            }
+            guard let descriptor = fontDescriptors.first else { return }
+            guard let attributes = CTFontDescriptorCopyAttributes(descriptor) as? [NSString: Any],
+                    let name = attributes[kCTFontNameAttribute] as? NSString else {
+                return
+            }
+            self?.registerButton.setTitle("注册字体[\(name)]", for: .normal)
+            self?.registerButton.titleLabel?.font = UIFont(name: name as String, size: 15)
+            self?.resignButton.setTitle("注销字体[\(name)]", for: .normal)
+            self?.resignButton.titleLabel?.font = UIFont(name: name as String, size: 15)
+        }
+        
+        importFontFile()
+    }
+    
+    func resignFont() {
+        if let url = registedUrl {
+            // MARK: - Listing 3 - 10
+            CTFontManagerUnregisterFontsForURL(url as CFURL, .process, nil)
+        }
+        
+        registerButton.setTitle("注册字体", for: .normal)
+        registerButton.titleLabel?.font = nil
+        resignButton.setTitle("注销字体", for: .normal)
+        resignButton.titleLabel?.font = nil
+    }
+    
+    func importFont() {
+        fontFileUrlHandler = { [weak self] url in
+            print(url)
+            // MARK: - Listing 3 - 11
+            // 通过字体文件 url 创建 CTFontDescriptor
+            guard let fontDescriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor] else {
+                return
+            }
+            // 打印字体信息
+            fontDescriptors.forEach { descriptor in
+                guard let attributes = CTFontDescriptorCopyAttributes(descriptor) as? [NSString: Any] else {
+                    return
+                }
+                for (key, value) in attributes {
+                    print("\(key): \(value)")
+                }
+            }
+            
+            guard let descriptor = fontDescriptors.first else { return }
+            guard let attributes = CTFontDescriptorCopyAttributes(descriptor) as? [NSString: Any],
+                    let name = attributes[kCTFontNameAttribute] as? NSString else {
+                return
+            }
+            // 通过 fontDescriptor 创建 CTFont
+            let font = CTFontCreateWithFontDescriptor(descriptor, 15, nil)
+            self?.importButton.setTitle("直接使用字体[\(name)]", for: .normal)
+            self?.importButton.titleLabel?.font = font
+        }
+        
+        importFontFile()
+    }
+    
+    
+}
+
+private extension ViewController {
+    func importFontFile() {
+        let documentPicker = UIDocumentPickerViewController(forOpeningContentTypes: [.font])
+        documentPicker.delegate = self
+        present(documentPicker, animated: true, completion: nil)
+    }
+    
+}
+
+extension ViewController: UIDocumentPickerDelegate {
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        guard let url = urls.first else { return }
+        guard url.startAccessingSecurityScopedResource() else { return }
+        defer { url.stopAccessingSecurityScopedResource() }
+        
+        var error: NSError? = nil
+        NSFileCoordinator().coordinate(readingItemAt: url, error: &error) { [weak self] url in
+            self?.fontFileUrlHandler?(url)
+        }
+    }
+}
+
+private extension ViewController {
     func setupUI() {
         view.addSubview(textView)
         textView.isEditable = false
         textView.snp.makeConstraints { make in
             make.left.right.top.equalTo(view.safeAreaLayoutGuide)
-            make.bottom.equalToSuperview()
+        }
+        
+        let stackView = UIStackView()
+        stackView.axis = .vertical
+        stackView.distribution = .fillEqually
+        
+        stackView.addArrangedSubview(registerButton)
+        stackView.addArrangedSubview(resignButton)
+        stackView.addArrangedSubview(importButton)
+        
+        registerButton.setTitle("注册字体", for: .normal)
+        registerButton.setTitleColor(.black, for: .normal)
+        registerButton.addTarget(self, action: #selector(onButtonClick(_:)), for: .touchUpInside)
+        resignButton.setTitle("注销字体", for: .normal)
+        resignButton.setTitleColor(.black, for: .normal)
+        resignButton.addTarget(self, action: #selector(onButtonClick(_:)), for: .touchUpInside)
+        importButton.setTitle("直接使用字体", for: .normal)
+        importButton.setTitleColor(.black, for: .normal)
+        importButton.addTarget(self, action: #selector(onButtonClick(_:)), for: .touchUpInside)
+        
+        view.addSubview(stackView)
+        stackView.snp.makeConstraints { make in
+            make.left.right.bottom.equalTo(view.safeAreaLayoutGuide)
+            make.top.equalTo(textView.snp.bottom)
+            make.height.equalTo(150)
         }
     }
 }
