@@ -7,6 +7,7 @@
 
 import UIKit
 import SnapKit
+import CoreFoundation
 import CoreText
 import UniformTypeIdentifiers
 
@@ -85,7 +86,16 @@ class ViewController: UIViewController {
         if attributedString35 != nil {
             attributedString.append(attributedString35!)
         }
+        
+        let xmlData = createFlattenedFontData(font: UIFont.init(name: "System Font", size: 15)!)
+        if let font37 = createFontFromFlattenedFontData(data: xmlData!) {
+            attributedString.append(NSAttributedString(string: "createFontFromFlattenedFontData\n", attributes: [.font: font37]))
+        }
+        
         attributedString.append(attributedString38)
+
+        getGlyphsForCharacters(font: UIFont.init(name: "System Font", size: 15)!, string: "hello")
+        
         textView.attributedText = attributedString
     }
 
@@ -149,21 +159,40 @@ extension ViewController {
     }
     
     // MARK: Listing 3 - 6
-//    func createFlattenedFontData(font: CTFont) -> Data? {
-//        var error =
-//        let descriptor = CTFontCopyFontDescriptor(font)
-//        let attributes = CTFontDescriptorCopyAttributes(descriptor)
-//        if CFPropertyListIsValid(attributes, .xmlFormat_v1_0) {
-//            CFPropertyListCreateData(kCFAllocatorDefault, attributes, .xmlFormat_v1_0, .zero, <#T##error: UnsafeMutablePointer<Unmanaged<CFError>?>!##UnsafeMutablePointer<Unmanaged<CFError>?>!#>)
-//            CFPropertyListCreateXMLData(nil, attributes)
-//        }
-//
-//    }
+    func createFlattenedFontData(font: CTFont) -> NSData? {
+        let descriptor = CTFontCopyFontDescriptor(font)
+        let attributes = CTFontDescriptorCopyAttributes(descriptor)
+        
+        var cfError: CFError! = CFErrorCreate(nil, "com.hezhujun.ios.CommonFontOperations" as CFErrorDomain, 0, nil)
+        var unmanagedError: Unmanaged<CFError>? = Unmanaged.passUnretained(cfError)
+        let data: NSData? = withUnsafeMutablePointer(to: &unmanagedError) { error in
+            if CFPropertyListIsValid(attributes, .xmlFormat_v1_0) {
+                let unmanagedData: Unmanaged<CFData>! = CFPropertyListCreateData(kCFAllocatorDefault, attributes, .xmlFormat_v1_0, .zero, error)
+                let data: NSData = unmanagedData.takeRetainedValue() as NSData
+                if let xmlString = NSString(data: data as Data, encoding: String.Encoding.utf8.rawValue) {
+                    print("createFlattenedFontData: xml data \n\(xmlString)")
+                } else {
+                    print("createFlattenedFontData: convert data to string error!")
+                }
+                return data
+            } else {
+                return nil
+            }
+        }
+        return data
+    }
     
     // MARK: Listing 3 - 7
-//    func createFontFromFlattenedFontData(data: CFData) -> CTFont {
-//
-//    }
+    func createFontFromFlattenedFontData(data: NSData) -> CTFont? {
+        var format = CFPropertyListFormat.xmlFormat_v1_0
+        let font: CTFont? = withUnsafeMutablePointer(to: &format) { format in
+            let unmanagedPropertyList: Unmanaged<CFPropertyList>! = CFPropertyListCreateWithData(nil, data, CFPropertyListMutabilityOptions.mutableContainersAndLeaves.rawValue, format, nil)
+            let attributes = unmanagedPropertyList.takeRetainedValue() as! CFDictionary
+            let descriptor = CTFontDescriptorCreateWithAttributes(attributes)
+            return CTFontCreateWithFontDescriptor(descriptor, 0, nil)
+        }
+        return font
+    }
     
     // MARK: Listing 3 - 8
     func listing38(attrString: NSMutableAttributedString, range: CFRange) {
@@ -172,15 +201,19 @@ extension ViewController {
     }
     
     // MARK: Listing 3 - 9
-//    func getGlyphsForCharacters(font: CTFont, string: String) {
-//        let count = CFStringGetLength(string as CFString)
-//        var characters = UniChar(0)
-//        var glyhps = CGGlyph(0)
-//        
-//        CFStringGetCharacters(string, CFRangeMake(0, count), <#T##buffer: UnsafeMutablePointer<UniChar>!##UnsafeMutablePointer<UniChar>!#>)
-//        CTFontGetGlyphsForCharacters(font, <#T##characters: UnsafePointer<UniChar>##UnsafePointer<UniChar>#>, <#T##glyphs: UnsafeMutablePointer<CGGlyph>##UnsafeMutablePointer<CGGlyph>#>, count)
-//        
-//    }
+    func getGlyphsForCharacters(font: CTFont, string: String) {
+        let count = CFStringGetLength(string as CFString)
+        var characters = UnsafeMutableBufferPointer<UniChar>.allocate(capacity: count)
+        var glyhps = UnsafeMutableBufferPointer<CGGlyph>.allocate(capacity: count)
+        
+        CFStringGetCharacters(string as CFString, CFRangeMake(0, count), characters.baseAddress)
+        CTFontGetGlyphsForCharacters(font, characters.baseAddress!, glyhps.baseAddress!, count)
+        
+        print("getGlyphsForCharacters")
+        for i in glyhps.startIndex..<glyhps.endIndex {
+            print((glyhps.baseAddress! + i).pointee)
+        }
+    }
 }
 
 private extension ViewController {
